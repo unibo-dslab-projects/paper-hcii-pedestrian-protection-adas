@@ -1,5 +1,8 @@
-import React from "react";
+import React, { Fragment } from "react";
+import Dashboard from "./components/Dashboard";
 
 export default function Page() {
-    return <h1>Hello, Next.js!</h1>
+    return <Fragment>
+        <Dashboard />
+    </Fragment>
 }
