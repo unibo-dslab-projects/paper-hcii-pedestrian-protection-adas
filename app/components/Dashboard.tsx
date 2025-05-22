@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import mqtt from "mqtt";
+import WarningMessage from "./WarningMessage";
+import NeutralMessage from "./NeutralMessage";
+import DangerMessage from "./DangerMessage";
 
 type Pedestrian = {
   x: number;
@@ -9,6 +12,7 @@ type Pedestrian = {
 
 function Dashboard() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const client = useRef(mqtt.connect("ws://localhost:8080"));
   const [pedestrians, setPedestrians] = useState<Pedestrian[]>([]);
   const width = 1200;
@@ -119,35 +123,21 @@ function Dashboard() {
       pedestrians.forEach((pedestrian) => {
         drawPedestrian(ctx, pedestrian);
       });
+      if (pedestrians.length > 0) {
+        audioRef.current.play();
+      }
     }
   }, [pedestrians]);
 
   return (
     <div className="relative">
+      <audio ref={audioRef} id="audio">
+        <source src="/MobitasAlertSound.m4a" type="audio/mp4"/>
+      </audio>
       <canvas ref={canvasRef} id="canvas" width={width} height={height} className="border mb-6 rounded-lg"></canvas>
-      <div className="text-center">
-        <div className="bg-yellow-400 rounded-full text-center mb-4 p-10">
-          <h1 className="text-4xl font-bold">SLOW DOWN!</h1>
-          <p className="text-lg">Pedestrian detected ahead</p>
-          <p className="text-9xl font-bold">{pedestrians[0]?.distance} m</p>
-          <p className="text-4xl">Estimating <strong>{pedestrians[0]?.distance / 2}s</strong> to collision</p>
-        </div>
-      </div>
-      <div className="text-center">
-        <div className="bg-blue-400 rounded-full text-center mb-4 p-10">
-          <h1 className="text-4xl font-bold">DRIVE SAFE</h1>
-          <p className="text-9xl font-bold">Pay attention</p>
-          
-        </div>
-      </div>
-      <div className="text-center">
-        <div className="bg-red-400 rounded-full text-center mb-4 p-10">
-          <h1 className="text-4xl font-bold">EMERGENCY BRAKE!</h1>
-          <p className="text-lg">Pedestrian detected ahead</p>
-          <p className="text-9xl font-bold">{pedestrians[0]?.distance} m</p>
-          <p className="text-4xl">Estimating <strong>{pedestrians[0]?.distance / 2}s</strong> to collision</p>
-        </div>
-      </div>
+      <WarningMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.distance / 2} />  
+      {false && <NeutralMessage />}
+      {false && <DangerMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.distance / 2} />}
     </div>
   );
 }
