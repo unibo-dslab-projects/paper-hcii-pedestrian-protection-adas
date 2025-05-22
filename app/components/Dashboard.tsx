@@ -1,4 +1,4 @@
-import { use, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import mqtt from "mqtt";
 
 type Pedestrian = {
@@ -11,20 +11,26 @@ function Dashboard() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const client = useRef(mqtt.connect("ws://localhost:8080"));
   const [pedestrians, setPedestrians] = useState<Pedestrian[]>([]);
+  const width = 1200;
+  const height = 600;
+  const carWidth = 200;
+  const carHeight = 200;
+  const baseLaneWidth = 800;
+  const farLaneWidth = 400;
 
   function clearCanvas(ctx: CanvasRenderingContext2D) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    ctx.fillStyle = "gray";
-    ctx.fillRect(0, 0, 800, 600);
+    ctx.fillStyle = "rgb(240, 240, 240)";
+    ctx.fillRect(0, 0, width, height);
     drawCar(ctx);
-    drawLaneLines(ctx);
+    drawLane(ctx);
   }
 
   function drawCar(ctx: CanvasRenderingContext2D) {
     const carImage = new Image();
     carImage.src = "/car.png";
     carImage.onload = () => {
-      ctx.drawImage(carImage, 420, 400, 200, 200);
+      ctx.drawImage(carImage, (width - carWidth) / 2 + baseLaneWidth * 0.25, height - carHeight, carWidth, carHeight);
     };
   }
 
@@ -43,25 +49,49 @@ function Dashboard() {
     };
   }
 
-  function drawLaneLines(ctx: CanvasRenderingContext2D) {
-    ctx.strokeStyle = "white";
-    ctx.lineWidth = 10;
+  function drawLane(ctx: CanvasRenderingContext2D) {
+    // Draw the lane as a simple gray trapezoid
+    ctx.fillStyle = "gray";
     ctx.beginPath();
     ctx.setLineDash([]);
-    ctx.moveTo(150, 600);
-    ctx.lineTo(200, 0);
+    ctx.moveTo((width - baseLaneWidth) / 2, height);
+    ctx.lineTo((width + baseLaneWidth) / 2, height);
+    ctx.lineTo((width + farLaneWidth) / 2, 0);
+    ctx.lineTo((width - farLaneWidth) / 2, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    /* Draw the lane lines */
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 10;
+    
+    // Draw left curb line
+    const curbOffset = 30;
+    ctx.beginPath();
+    ctx.moveTo((width - baseLaneWidth) / 2 + curbOffset, height);
+    ctx.lineTo((width - farLaneWidth) / 2 + curbOffset, 0);
     ctx.stroke();
 
+    // Draw right curb line
     ctx.beginPath();
-    ctx.moveTo(650, 600);
-    ctx.lineTo(600, 0);
+    ctx.moveTo((width + baseLaneWidth) / 2 - curbOffset, height);
+    ctx.lineTo((width + farLaneWidth) / 2 - curbOffset, 0);
     ctx.stroke();
 
+    // Draw left diagonal lane line
     ctx.beginPath();
-    ctx.setLineDash([20, 20]);
-    ctx.moveTo(400, 600);
-    ctx.lineTo(400, 0);
+    ctx.moveTo((width - farLaneWidth) / 2 + farLaneWidth - curbOffset, 0);
+    ctx.lineTo((width - baseLaneWidth) / 2 + baseLaneWidth - curbOffset, height);
     ctx.stroke();
+
+    // Draw dashed center line
+    ctx.beginPath();
+    ctx.lineWidth = 5;
+    ctx.setLineDash([20, 40]);
+    ctx.moveTo(width / 2, height);
+    ctx.lineTo(width / 2, 0);
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset dash
   }
 
   useEffect(() => {
@@ -93,8 +123,8 @@ function Dashboard() {
   }, [pedestrians]);
 
   return (
-    <div>
-     <canvas ref={canvasRef} id="canvas" width="1200" height="600" className="border mb-6 rounded-lg"></canvas>
+    <div className="relative">
+      <canvas ref={canvasRef} id="canvas" width={width} height={height} className="border mb-6 rounded-lg"></canvas>
       <div className="text-center">
         <div className="bg-yellow-400 rounded-full text-center mb-4 p-10">
           <h1 className="text-4xl font-bold">SLOW DOWN!</h1>
@@ -103,14 +133,21 @@ function Dashboard() {
           <p className="text-4xl">Estimating <strong>{pedestrians[0]?.distance / 2}s</strong> to collision</p>
         </div>
       </div>
-      <h1 className="text-2xl font-bold mt-4">Dashboard</h1>
-      <ul>
-        {pedestrians.map((pedestrian, index) => (
-          <li key={index} className="text-lg">
-            Pedestrian {index + 1}: x: {pedestrian.x}, y: {pedestrian.y}
-          </li>
-        ))}
-      </ul>
+      <div className="text-center">
+        <div className="bg-blue-400 rounded-full text-center mb-4 p-10">
+          <h1 className="text-4xl font-bold">DRIVE SAFE</h1>
+          <p className="text-9xl font-bold">Pay attention</p>
+          
+        </div>
+      </div>
+      <div className="text-center">
+        <div className="bg-red-400 rounded-full text-center mb-4 p-10">
+          <h1 className="text-4xl font-bold">EMERGENCY BRAKE!</h1>
+          <p className="text-lg">Pedestrian detected ahead</p>
+          <p className="text-9xl font-bold">{pedestrians[0]?.distance} m</p>
+          <p className="text-4xl">Estimating <strong>{pedestrians[0]?.distance / 2}s</strong> to collision</p>
+        </div>
+      </div>
     </div>
   );
 }
