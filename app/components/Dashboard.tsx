@@ -21,6 +21,7 @@ function Dashboard() {
   const carHeight = 200;
   const baseLaneWidth = 800;
   const farLaneWidth = 400;
+  const showWarning = pedestrians.length > 0
 
   function clearCanvas(ctx: CanvasRenderingContext2D) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -124,21 +125,35 @@ function Dashboard() {
         drawPedestrian(ctx, pedestrian);
       });
       if (pedestrians.length > 0) {
+        audioRef.current.currentTime = 0;
         audioRef.current.play();
+      } else {
+        audioRef.current.pause();
       }
     }
   }, [pedestrians]);
 
   return (
+  <>
     <div className="relative">
       <audio ref={audioRef} id="audio">
         <source src="/MobitasAlertSound.m4a" type="audio/mp4"/>
       </audio>
       <canvas ref={canvasRef} id="canvas" width={width} height={height} className="border mb-6 rounded-lg"></canvas>
-      <WarningMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.distance / 2} />  
-      {false && <NeutralMessage />}
+      {showWarning && <WarningMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.distance / 2} />}
+      {!showWarning && <NeutralMessage />}
       {false && <DangerMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.distance / 2} />}
     </div>
+    {
+      showWarning && <>
+      <div className="absolute top-0 left-0 h-full shadow-2xl bg-red-200 shadow-red-500 w-20 animate-ping"></div>
+      <div className="absolute top-0 right-0 h-full shadow-2xl bg-red-200 shadow-red-500 w-20 animate-ping"></div>
+      </>
+    }
+
+
+    {false && <div className="absolute top-0 left-0 w-dvw shadow-2xl/100 bg-red-200 shadow-red-500 h-20 animate-ping"></div>}
+  </>
   );
 }
 
