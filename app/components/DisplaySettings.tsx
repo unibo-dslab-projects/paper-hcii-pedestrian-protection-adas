@@ -63,10 +63,6 @@ function DisplaySettings({ settings, setSettings }: { settings: AlertSettings, s
                                         </FormSwitch>
                                     </li>
                                 </ul>
-                                <div className="mt-10 flex justify-around">
-                                    <input className="bg-blue-500 text-white px-4 py-2 rounded" type="submit" value="Save Settings" />
-                                    <input className="bg-gray-300 text-gray-700 px-4 py-2 rounded" type="reset" value="Cancel" data-modal-hide="settings-modal"/>
-                                </div>
                             </form>
                         </div>
                     </div>

@@ -22,7 +22,7 @@ function FormSwitch({
         after:w-8 after:h-8 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600 
         dark:peer-checked:bg-blue-600"></div>
     </label>
-    {children && <p className="text-sm text-gray-500 text-wrap pl-4 w-5/6">{children}</p>}
+    {children && <p className="text-xs text-gray-500 text-wrap pl-4 w-5/6">{children}</p>}
     </>
   );
 }
