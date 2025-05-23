@@ -3,6 +3,8 @@ import mqtt from "mqtt";
 import WarningMessage from "./WarningMessage";
 import NeutralMessage from "./NeutralMessage";
 import DangerMessage from "./DangerMessage";
+import Navbar from "./Navbar";
+import DisplaySettings, { AlertSettings } from "./DisplaySettings";
 
 type Pedestrian = {
   x: number;
@@ -10,23 +12,39 @@ type Pedestrian = {
   distance: number;
 }
 
+type CanvasSettings = {
+  width: number;
+  height: number;
+  carWidth: number;
+  carHeight: number;
+  baseLaneWidth: number;
+  farLaneWidth: number;
+}
+
 function Dashboard() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const client = useRef(mqtt.connect("ws://localhost:8080"));
   const [pedestrians, setPedestrians] = useState<Pedestrian[]>([]);
-  const width = 1200;
-  const height = 600;
-  const carWidth = 200;
-  const carHeight = 200;
-  const baseLaneWidth = 800;
-  const farLaneWidth = 400;
-  const showWarning = pedestrians.length > 0
+  const canvasSettings: CanvasSettings = {
+    width: 1200,
+    height: 600,
+    carWidth: 200,
+    carHeight: 200,
+    baseLaneWidth: 800,
+    farLaneWidth: 400,
+  }
+  const [alarmSettings, setAlarmSettings] = useState<AlertSettings>({
+    soundOnWarning: true,
+    soundOnDanger: true,
+    flashing: true,
+  });
+  const showWarning: boolean = pedestrians.length > 0
 
   function clearCanvas(ctx: CanvasRenderingContext2D) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.fillStyle = "rgb(240, 240, 240)";
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(0, 0, canvasSettings.width, canvasSettings.height);
     drawCar(ctx);
     drawLane(ctx);
   }
@@ -35,7 +53,7 @@ function Dashboard() {
     const carImage = new Image();
     carImage.src = "/car.png";
     carImage.onload = () => {
-      ctx.drawImage(carImage, (width - carWidth) / 2 + baseLaneWidth * 0.25, height - carHeight, carWidth, carHeight);
+      ctx.drawImage(carImage, (canvasSettings.width - canvasSettings.carWidth) / 2 + canvasSettings.baseLaneWidth * 0.25, canvasSettings.height - canvasSettings.carHeight, canvasSettings.carWidth, canvasSettings.carHeight);
     };
   }
 
@@ -59,10 +77,10 @@ function Dashboard() {
     ctx.fillStyle = "gray";
     ctx.beginPath();
     ctx.setLineDash([]);
-    ctx.moveTo((width - baseLaneWidth) / 2, height);
-    ctx.lineTo((width + baseLaneWidth) / 2, height);
-    ctx.lineTo((width + farLaneWidth) / 2, 0);
-    ctx.lineTo((width - farLaneWidth) / 2, 0);
+    ctx.moveTo((canvasSettings.width - canvasSettings.baseLaneWidth) / 2, canvasSettings.height);
+    ctx.lineTo((canvasSettings.width + canvasSettings.baseLaneWidth) / 2, canvasSettings.height);
+    ctx.lineTo((canvasSettings.width + canvasSettings.farLaneWidth) / 2, 0);
+    ctx.lineTo((canvasSettings.width - canvasSettings.farLaneWidth) / 2, 0);
     ctx.closePath();
     ctx.fill();
 
@@ -73,28 +91,28 @@ function Dashboard() {
     // Draw left curb line
     const curbOffset = 30;
     ctx.beginPath();
-    ctx.moveTo((width - baseLaneWidth) / 2 + curbOffset, height);
-    ctx.lineTo((width - farLaneWidth) / 2 + curbOffset, 0);
+    ctx.moveTo((canvasSettings.width - canvasSettings.baseLaneWidth) / 2 + curbOffset, canvasSettings.height);
+    ctx.lineTo((canvasSettings.width - canvasSettings.farLaneWidth) / 2 + curbOffset, 0);
     ctx.stroke();
 
     // Draw right curb line
     ctx.beginPath();
-    ctx.moveTo((width + baseLaneWidth) / 2 - curbOffset, height);
-    ctx.lineTo((width + farLaneWidth) / 2 - curbOffset, 0);
+    ctx.moveTo((canvasSettings.width + canvasSettings.baseLaneWidth) / 2 - curbOffset, canvasSettings.height);
+    ctx.lineTo((canvasSettings.width + canvasSettings.farLaneWidth) / 2 - curbOffset, 0);
     ctx.stroke();
 
     // Draw left diagonal lane line
     ctx.beginPath();
-    ctx.moveTo((width - farLaneWidth) / 2 + farLaneWidth - curbOffset, 0);
-    ctx.lineTo((width - baseLaneWidth) / 2 + baseLaneWidth - curbOffset, height);
+    ctx.moveTo((canvasSettings.width - canvasSettings.farLaneWidth) / 2 + canvasSettings.farLaneWidth - curbOffset, 0);
+    ctx.lineTo((canvasSettings.width - canvasSettings.baseLaneWidth) / 2 + canvasSettings.baseLaneWidth - curbOffset, canvasSettings.height);
     ctx.stroke();
 
     // Draw dashed center line
     ctx.beginPath();
     ctx.lineWidth = 5;
     ctx.setLineDash([20, 40]);
-    ctx.moveTo(width / 2, height);
-    ctx.lineTo(width / 2, 0);
+    ctx.moveTo(canvasSettings.width / 2, canvasSettings.height);
+    ctx.lineTo(canvasSettings.width / 2, 0);
     ctx.stroke();
     ctx.setLineDash([]); // Reset dash
   }
@@ -104,7 +122,6 @@ function Dashboard() {
     const ctx = canvas?.getContext("2d");
     client.current.subscribe("hello");
     client.current.on("message", (topic, message) => {
-      console.log(topic, message.toString());
       setPedestrians(() => {
         const newPedestrians = JSON.parse(message.toString()) as Pedestrian[];
         return newPedestrians;
@@ -124,8 +141,10 @@ function Dashboard() {
       pedestrians.forEach((pedestrian) => {
         drawPedestrian(ctx, pedestrian);
       });
-      if (pedestrians.length > 0) {
-        audioRef.current.currentTime = 0;
+      if (pedestrians.length > 0 && alarmSettings.soundOnWarning) {
+        if (audioRef.current.paused) {
+          audioRef.current.currentTime = 0;
+        }
         audioRef.current.play();
       } else {
         audioRef.current.pause();
@@ -134,26 +153,33 @@ function Dashboard() {
   }, [pedestrians]);
 
   return (
-  <>
-    <div className="relative">
-      <audio ref={audioRef} id="audio">
-        <source src="/MobitasAlertSound.m4a" type="audio/mp4"/>
-      </audio>
-      <canvas ref={canvasRef} id="canvas" width={width} height={height} className="border mb-6 rounded-lg"></canvas>
-      {showWarning && <WarningMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.distance / 2} />}
-      {!showWarning && <NeutralMessage />}
-      {false && <DangerMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.distance / 2} />}
-    </div>
-    {
-      showWarning && <>
-      <div className="absolute top-0 left-0 h-full shadow-2xl bg-red-200 shadow-red-500 w-20 animate-ping"></div>
-      <div className="absolute top-0 right-0 h-full shadow-2xl bg-red-200 shadow-red-500 w-20 animate-ping"></div>
-      </>
-    }
-
-
-    {false && <div className="absolute top-0 left-0 w-dvw shadow-2xl/100 bg-red-200 shadow-red-500 h-20 animate-ping"></div>}
-  </>
+    <>
+      <Navbar>
+        <ul className="font-medium flex flex-col p-4 md:p-0 mt-4 border border-gray-100 rounded-lg bg-gray-50 md:flex-row md:space-x-8 rtl:space-x-reverse md:mt-0 md:border-0 md:bg-white dark:bg-gray-800 md:dark:bg-gray-900 dark:border-gray-700">
+            <li>
+                <DisplaySettings settings={alarmSettings} setSettings={setAlarmSettings} />
+            </li>
+        </ul>
+      </Navbar>
+      <div className="p-4 flex justify-center">
+          <div className="relative">
+            <audio ref={audioRef} id="audio" loop>
+              <source src="/MobitasAlertSound.m4a" type="audio/mp4"/>
+            </audio>
+            <canvas ref={canvasRef} id="canvas" width={canvasSettings.width} height={canvasSettings.height} className="border mb-6 rounded-lg"></canvas>
+            {showWarning && <WarningMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.distance / 2} />}
+            {!showWarning && <NeutralMessage />}
+            {false && <DangerMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.distance / 2} />}
+          </div>
+          {
+            showWarning && alarmSettings.flashing &&
+            <>
+              <div className="absolute top-0 left-0 h-full shadow-2xl bg-red-400 shadow-red-500 w-30 animate-ping z-0"></div>
+              <div className="absolute top-0 right-0 h-full shadow-2xl bg-red-400 shadow-red-500 w-30 animate-ping z-0"></div>
+            </>
+          }
+      </div>
+    </>
   );
 }
 
