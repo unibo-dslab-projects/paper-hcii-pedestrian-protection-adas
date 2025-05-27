@@ -3,19 +3,11 @@ import paho.mqtt.client as mqtt
 import numpy as np
 import tkinter as tk
 from ultralytics.models.yolo import YOLO
+from enum import Enum
 
 logging.getLogger("ultralytics").setLevel(logging.WARNING)
 
-
-# ### Global Variables and Constants
-# This cell defines global constants and settings that will be used throughout the notebook:
-# - `BROKER`, `PORT`, and `TOPIC` define the MQTT broker settings.
-# - `VIEW_WIDTH`, and `VIEW_HEIGHT` are determined using Tkinter to adapt the camera view size to the screen.
-
-# In[ ]:
-
-
-BROKER = "test.mosquitto.org"
+BROKER = "localhost"
 PORT = 1883
 TOPIC = "pedestrian_monitoring/"
 
@@ -23,16 +15,16 @@ VIEW_WIDTH = tk.Tk().winfo_screenwidth()
 VIEW_HEIGHT = tk.Tk().winfo_screenheight()
 VIEW_FOV = 90
 
+class Mode(Enum):
+    JOYSTICK = "joystick"
+    KEYBOARD = "keyboard"
 
-# ### CARLA and MQTT Setup
-# In this cell, we set up the connection to the CARLA simulator and configure the MQTT client:
-# - The MQTT client is initialized and connected to a public broker (`test.mosquitto.org`) on port 1883.
-# - We attempt to connect to the CARLA server running on `localhost` at port 2000 and retrieve the simulation world.
+MODE = Mode.KEYBOARD
 
-# In[ ]:
+##############################################
+############ CARLA and MQTT Setup ############
+##############################################
 
-
-## Carla set up
 mqtt_client = mqtt.Client()
 
 try:
@@ -63,25 +55,6 @@ stored_depth_image = None
 backwards_only_flag = False
 braking_flag = False
 
-
-# ### Weather Conditions Setup
-# This cell defines several weather scenarios using CARLA's `WeatherParameters`. We create settings for:
-# - Nighttime,
-# - Sunny,
-# - Rainy, and
-# - Foggy conditions.
-# These definitions allow us to test system performance under various environmental conditions.
-# 
-
-# In[ ]:
-
-
-### weather choice
-night_scenario = carla.WeatherParameters(
-    sun_azimuth_angle=180.0,
-    sun_altitude_angle=-90.0,
-)
-
 sunny_weather = carla.WeatherParameters(
     cloudiness=0.0,
     precipitation=0.0,
@@ -90,40 +63,16 @@ sunny_weather = carla.WeatherParameters(
     sun_altitude_angle=70.0
 )
 
-rainy_weather = carla.WeatherParameters(
-    cloudiness=80.0,
-    precipitation=100.0,
-    precipitation_deposits=80.0,
-    wind_intensity=30.0,
-    sun_altitude_angle=20.0
-)
-
-foggy_weather = carla.WeatherParameters(
-    cloudiness=70.0,
-    precipitation=0.0,
-    precipitation_deposits=0.0,
-    wind_intensity=10.0,
-    fog_density=80.0,
-    fog_distance=10.0,
-    fog_falloff=2.0,
-    sun_altitude_angle=20.0
-)
-
 world.set_weather(sunny_weather)
 
+##############################################
+######### Image Processing Functions #########
+##############################################
 
-# ### Image Processing Functions
-# Here we define functions to process the raw sensor images:
 # - `render(image)`: Converts the raw image data (which is in BGRA format) into an RGB NumPy array suitable for display.
 # - `image_processing(image, target_size)`: Resizes and pads images to match the required input size for the YOLO model.
 # - `set_rgb_image(image)` and `set_depth_image(image)`: Callback functions to store the latest RGB and Depth images.
 # - `get_depth_at_pixel(x, y)`: Retrieves the depth value (in meters) for a specific pixel by decoding the 24-bit depth information from the BGRA image.
-# 
-
-# In[ ]:
-
-
-### image processing
 
 def render(image):
     """
@@ -210,19 +159,14 @@ def get_depth_at_pixel(x, y):
 
     return depth_in_meters
 
+##############################################
+######## Simulation Environment Setup ########
+##############################################
 
-# ### Simulation Environment Setup
-# This cell defines functions to set up the CARLA simulation environment:
 # - `setup_car()`: Spawns a vehicle in a random location and sets its light state based on the current weather.
 # - `spawn_walker(world)`: Spawns a pedestrian (walker) and its controller in the simulation.
 # - `setup_camera(car)`: Attaches both an RGB and a Depth camera to the vehicle at a defined transform, and configures their intrinsic calibration.
 # - `move_spectator_to(transform, spectator, ...)`: Adjusts the spectator camera position so that the user has a clear view of the vehicle’s state.
-# 
-
-# In[ ]:
-
-
-### setup simulation env
 
 def setup_car():
     """
@@ -242,7 +186,7 @@ def setup_car():
         car.set_light_state(carla.VehicleLightState(carla.VehicleLightState.Position))
     return car
 
-def spawn_walker(world):
+def spawn_walker(world: carla.World):
     """
     Spawns a pedestrian walker in the given CARLA world.
     Args:
@@ -294,7 +238,7 @@ def spawn_walker(world):
 
     return walker, controller
 
-def setup_camera(car):
+def setup_camera(car: carla.Vehicle):
     """
     Spawns both an RGB and a Depth camera on the vehicle.
 
@@ -355,19 +299,12 @@ def move_spectator_to(transform, spectator, distance=5.0, x=0, y=0, z=4, yaw=0, 
 
     spectator.set_transform(spectator_transform)
 
+##############################################
+######## Vehicle Controller Functions ########
+##############################################
 
-# ### Vehicle Controller Functions
-# This cell defines two functions for vehicle control:
 # - `control_car(car, backwards_only=False)`: Uses keyboard input (via Pygame) to control the vehicle.
 # - `control_car_with_wheel(car, joystick, backwards_only=False)`: Uses joystick input to control the vehicle.
-# 
-# Both functions ensure that the vehicle's behavior remains consistent regardless of the input method.
-# 
-
-# In[ ]:
-
-
-### car controllers
 
 def control_car(car, backwards_only=False):
     """
@@ -460,17 +397,13 @@ def control_car_with_wheel(car, joystick, backwards_only=False):
 
     car.apply_control(control)
 
+###########################################################
+######## Pedestrian Safety Mechanism and Detection ########
+###########################################################
 
-# ### Pedestrian Safety Mechanism and Detection
-# This cell defines the functions responsible for monitoring pedestrian safety and executing safety interventions:
 # - `send_warning(emergency)`: Publishes a warning message via MQTT depending on whether an emergency braking scenario is detected.
 # - `pedestrian_detection(image, model, vehicle, joystick)`: Processes the input RGB image using the YOLOv8 model to detect pedestrians. It filters detections based on confidence and passes the results to the safety monitoring function.
 # - `pedestrian_safety_monitoring(vehicle, results, joystick)`: Computes vehicle speed, retrieves depth information, calculates the Time-to-Collision (TTC), and triggers soft or emergency braking based on TTC thresholds.
-
-# In[ ]:
-
-
-### pedestrian safety mechanism
 
 def send_warning(emergency):
     """
@@ -516,8 +449,6 @@ def pedestrian_safety_monitoring(vehicle, results, joystick):
             send_warning(emergency=True)
             braking_flag = True
             print("Emergency braking")
-            # control_car(vehicle, backwards_only=True)
-            control_car_with_wheel(vehicle, joystick, backwards_only=True)
             backwards_only_flag = True
         elif ttc < 2.0 and ttc > 1.0 and vehicle_speed > 0.0:
             control = vehicle.get_control()
@@ -526,13 +457,16 @@ def pedestrian_safety_monitoring(vehicle, results, joystick):
             vehicle.apply_control(control)
             send_warning(emergency=False)
             print("Soft emergency braking")
-            # control_car(vehicle, backwards_only=False)
-            control_car_with_wheel(vehicle, joystick, backwards_only=False)
         elif distance >= 2.0:
-            # control_car(vehicle, backwards_only=False)
-            control_car_with_wheel(vehicle, joystick, backwards_only=False)
             braking_flag = False
             backwards_only_flag = False
+
+        if MODE == Mode.KEYBOARD:
+            control_car(vehicle, backwards_only=backwards_only_flag)
+        elif MODE == Mode.JOYSTICK:
+            control_car_with_wheel(vehicle, joystick, backwards_only=backwards_only_flag)
+        else:
+            raise ValueError("Invalid control mode. Use Mode.KEYBOARD or Mode.JOYSTICK.")
 
 def pedestrian_detection(image, model, vehicle, joystick):
     """
@@ -566,25 +500,26 @@ def pedestrian_detection(image, model, vehicle, joystick):
     pedestrian_safety_monitoring(vehicle, detections, joystick)
     return detections
 
+###########################################################
+######### Main Function and Running the Simulation ########
+###########################################################
 
-# ### Main Function and Running the Simulation
 # This cell contains the main function, which orchestrates the simulation:
 # - It spawns a vehicle, sets initial control, and moves the spectator.
 # - Cameras are attached to the vehicle, and a number of pedestrians are spawned.
 # - The main loop continuously ticks the CARLA world, processes images, runs pedestrian detection, and displays the results with bounding boxes.
 # - Vehicle control is continuously updated based on user input and safety interventions.
 # - The function handles a graceful exit on interruption.
-# 
 
-# In[ ]:
-
-
-pygame.joystick.init() # only for joystick control
-if pygame.joystick.get_count() == 0:
-    print("No joystick detected! Please connect your Logitech steering wheel.")
-    exit(1)
-joystick = pygame.joystick.Joystick(0) # assuming only one steering wheel is connected
-joystick.init()
+if MODE == Mode.JOYSTICK:
+    pygame.joystick.init() # only for joystick control
+    if pygame.joystick.get_count() == 0:
+        print("No joystick detected! Please connect your Logitech steering wheel.")
+        exit(1)
+    joystick = pygame.joystick.Joystick(0) # assuming only one steering wheel is connected
+    joystick.init()
+else:
+    joystick = None
 
 def main():
     try:
@@ -635,10 +570,15 @@ def main():
 
             cv2.imshow("Detection", bgr_for_display)
 
-
             pygame.display.flip()
-            control_car_with_wheel(vehicle, joystick, backwards_only=backwards_only_flag)
-            # control_car(vehicle, backwards_only=backwards_only_flag)
+
+            if MODE == Mode.KEYBOARD:
+                control_car(vehicle, backwards_only=backwards_only_flag)
+            elif MODE == Mode.JOYSTICK:
+                control_car_with_wheel(vehicle, joystick, backwards_only=backwards_only_flag)
+            else:
+                raise ValueError("Invalid control mode. Use Mode.KEYBOARD or Mode.JOYSTICK.")
+
     except KeyboardInterrupt:
         print('\nSimulation interrupted by user')
 
@@ -665,12 +605,9 @@ if __name__ == '__main__':
         traceback.print_exc()
         print(f'Exception occurred: {e}')
 
-
-# ### Cleanup
-# In case something goes wrong with the graceful exit, this cell can be run to clean up the simulation environment from all the actors.
-
-# In[ ]:
-
+################################################
+#################### Cleanup ###################
+################################################
 
 actors = world.get_actors()
 for actor in actors:
