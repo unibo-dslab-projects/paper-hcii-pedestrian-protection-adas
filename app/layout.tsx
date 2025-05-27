@@ -1,8 +1,7 @@
 "use client";
 
-import Navbar from './components/Navbar'
-import './global.css'
-import React from 'react'
+import React from 'react';
+import './global.css';
 
 export default function RootLayout({
     children,
@@ -18,7 +17,7 @@ export default function RootLayout({
             </head>
             <body>
                 {children}
-                <script src="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.js"></script>
+                <script async src="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.js"></script>
             </body>
         </html>
     )

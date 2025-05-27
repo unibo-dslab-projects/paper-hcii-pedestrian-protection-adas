@@ -1,4 +1,3 @@
-import { useState } from "react";
 import FormSwitch from "./FormSwitch";
 
 export type AlertSettings = {

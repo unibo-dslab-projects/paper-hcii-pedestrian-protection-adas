@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import DisplaySettings from "./DisplaySettings";
 
 function Navbar({children}: {children: React.ReactNode}) {
     return (
