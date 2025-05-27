@@ -1,0 +1,13 @@
+include:
+  - ./mosquitto/docker-compose.yaml
+
+services:
+  frontend:
+    build:
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    command: npm run dev # Adjust for production with a build step if we need it
+    depends_on:
+      - mosquitto
+    restart: unless-stopped
