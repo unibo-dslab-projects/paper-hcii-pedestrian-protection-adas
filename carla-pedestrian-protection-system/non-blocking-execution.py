@@ -9,6 +9,7 @@ import math
 from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
 import paho.mqtt.client as mqtt
+from ultralytics import YOLO
 
 
 
@@ -35,14 +36,14 @@ client.set_timeout(10.0)
 world = client.get_world()
 spectator = world.get_spectator()
 
-def spawn_camera(attach_to=None, transform=carla.Transform(carla.Location(x=1.2, z=1.2), carla.Rotation(pitch=-10)), fov=90.0, width=800, height=600, sensor_tick=0.0):
-    camera_bp = world.get_blueprint_library().find('sensor.camera.rgb')
-    camera_bp.set_attribute('image_size_x', str(width))
-    camera_bp.set_attribute('image_size_y', str(height))
-    camera_bp.set_attribute('fov', str(fov))
-    camera_bp.set_attribute('sensor_tick', str(sensor_tick))
-    camera = world.spawn_actor(camera_bp, transform, attach_to=attach_to)
-    return camera
+# def spawn_camera(attach_to=None, transform=carla.Transform(carla.Location(x=1.2, z=1.2), carla.Rotation(pitch=-10)), fov=90.0, width=800, height=600, sensor_tick=0.0):
+#     camera_bp = world.get_blueprint_library().find('sensor.camera.rgb')
+#     camera_bp.set_attribute('image_size_x', str(width))
+#     camera_bp.set_attribute('image_size_y', str(height))
+#     camera_bp.set_attribute('fov', str(fov))
+#     camera_bp.set_attribute('sensor_tick', str(sensor_tick))
+#     camera = world.spawn_actor(camera_bp, transform, attach_to=attach_to)
+#     return camera
 
 def remove_all(world: carla.World):
     '''
@@ -60,7 +61,9 @@ def remove_all(world: carla.World):
     for a in world.get_actors().filter('controller.ai.walker'):
         a.destroy()
 
-def process_image(image, res):
+model = YOLO("yolov8n.pt")
+
+def process_image():
     '''
     Process the input image, detect lanes, interpolate and draw the echidistant lane.
     If an error occurs, the original image with no relevations is put in the result queue.
@@ -69,7 +72,59 @@ def process_image(image, res):
         image: the input image
         res: the queue to put the result
     '''
-    res.put({'img': image, 'left_lane': None, 'right_lane': None})
+    global input_image, processed_image
+    while True:
+        with input_lock:
+            if input_image is None:
+                continue
+            image = input_image
+
+        def render(image):
+            """
+            Converts a raw image from a sensor to a NumPy array suitable for display.
+
+            Args:
+                image: An image object with raw_data, height, and width attributes.
+
+            Returns:
+                A NumPy array representing the image in RGB format.
+            """
+            if image is not None:
+                array = np.frombuffer(image.raw_data, dtype=np.uint8)
+                array = np.reshape(array, (image.height, image.width, 4))
+                array = array[:, :, :3]
+                array = array[:, :, ::-1]
+
+                return array
+        
+        # raw = render(image)
+        video_output = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
+        video_output = video_output[:, :, :3]
+
+
+        # results = model.predict(raw, verbose=False)[0]
+        results = model.predict(video_output)[0]
+        detections = []
+        if results.boxes is not None and len(results.boxes) > 0:
+            boxes = results.boxes.xyxy.cpu().numpy()
+            confs = results.boxes.conf.cpu().numpy()
+            classes = results.boxes.cls.cpu().numpy()
+            for i in range(len(boxes)):
+                if int(classes[i]) == 0 and confs[i] > 0.4:
+                    x1, y1, x2, y2 = boxes[i]
+                    bbox = (int(x1), int(y1), int(x2), int(y2))
+                    centroid = ((int(x1) + int(x2)) // 2, (int(y1) + int(y2)) // 2)
+                    detections.append((confs[i], bbox, centroid))
+
+        # print(len(detections), "detections found")
+        # print(results)
+        # processed_output.put({'img': image, 'left_lane': None, 'right_lane': None})
+        with output_lock:
+            processed_image = {
+                "img": video_output,
+                "detections": detections,
+            }
+
 
 
 class GameLoop(object):
@@ -144,7 +199,7 @@ class GameLoop(object):
         self.world.render(self.display)
         pygame.display.flip()
 
-    def start(self, processed_output, autopilot=False, detection_center=100, threshold=20):
+    def start(self, autopilot=False, detection_center=100, threshold=20):
         '''
         Starts the application loop.
 
@@ -168,10 +223,21 @@ class GameLoop(object):
                 # Show processed camera output
                 try:
                     # output = processed_output.get_nowait()
-                    output = processed_output.get()
+                    # output = processed_output.get()
+                    # processed_output.empty()
+                    with output_lock:
+                        output_img = processed_image["img"]
+                        output_detections = processed_image["detections"]
+
+                    bgr_for_display = cv2.cvtColor(output_img, cv2.COLOR_RGB2BGR)
+                    for conf, bbox, centroid in output_detections:
+                        cv2.rectangle(bgr_for_display, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0,255,0), 2)
+
+                    if bgr_for_display is not None:
+                        # print("Processed output: ", output)
+                        cv2.imshow('Processed image', bgr_for_display)
 
 
-                    cv2.imshow('Processed image', output['img'])
                 except Exception as e:
                     pass
 
@@ -335,7 +401,7 @@ def spawn_walker(world: carla.World):
 
 walkers = []
 controllers = []
-for _ in range(100):
+for _ in range(25):
     walker, controller = spawn_walker(world)
     if walker and controller:
         walkers.append(walker)
@@ -345,35 +411,60 @@ for _ in range(100):
 
 
 
+camera_width = 1920
+camera_height = 1080
+VIEW_FOV = 90
+
+def setup_camera(car: carla.Vehicle):
+    """
+    Spawns both an RGB and a Depth camera on the vehicle.
+
+    Args:
+        car (carla.Vehicle): The vehicle to which the cameras will be attached.
+    Returns:
+        tuple: A tuple containing the RGB camera and the Depth camera actors.
+    """
+    camera_transform = carla.Transform(carla.Location(x=1, y=-0.4, z=1.2), carla.Rotation())
+
+    blueprint_library = world.get_blueprint_library()
+
+    rgb_bp = blueprint_library.find('sensor.camera.rgb')
+    rgb_bp.set_attribute('image_size_x', str(camera_width))
+    rgb_bp.set_attribute('image_size_y', str(camera_height))
+    rgb_camera = world.spawn_actor(rgb_bp, camera_transform, attach_to=car)
+
+    depth_bp = blueprint_library.find('sensor.camera.depth')
+    depth_bp.set_attribute('image_size_x', str(camera_width))
+    depth_bp.set_attribute('image_size_y', str(camera_height))
+    depth_camera = world.spawn_actor(depth_bp, camera_transform, attach_to=car)
+
+    calibration = np.identity(3)
+    calibration[0, 2] = camera_width / 2.0
+    calibration[1, 2] = camera_height / 2.0
+    calibration[0, 0] = calibration[1, 1] = camera_width / (2.0 * np.tan(VIEW_FOV * np.pi / 360.0))
+    rgb_camera.calibration = calibration
+    depth_camera.calibration = calibration
+
+    return rgb_camera, depth_camera
 
 
 
+input_image = None
+input_lock = threading.Lock()
 
-
-
-camera_width = 800
-camera_height = 600
-
-crop_height = 240
-height_adjust = 50
-
-
-processed_output = Queue()
+processed_image = None
+output_lock = threading.Lock()
 
 # setup the simulation environment
 game_loop = setup()
 
 # get the vehicle and attach the camera
 vehicle = world.get_actors().filter('vehicle.*')[0]
-front_camera = spawn_camera(attach_to=vehicle, transform=carla.Transform(
-        carla.Location(x=0.3, y=0.0, z=1.5), # posizione dello specchietto retrovisore
-        carla.Rotation(pitch=-10.0)
-    ),
-    # sensor_tick=0.1,
-    width=camera_width, height=camera_height
-)
+rgb_camera, depth_camera = setup_camera(vehicle)
 
 cv2.namedWindow('Processed image', cv2.WINDOW_NORMAL)
+
+threading.Thread(target=process_image, daemon=True).start()
 
 # callback for the camera
 def camera_callback(image):
@@ -384,30 +475,32 @@ def camera_callback(image):
         image: the image captured by the camera
     '''
     try:
-        video_output = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
-        video_output = video_output[:, :, :3]
+        # video_output = np.reshape(np.copy(image.raw_data), (image.height, image.width, 4))
+        # video_output = video_output[:, :, :3]
 
         # Crop the image (zoom)
         # start_x = (video_output.shape[1] - crop_width) // 2
         # start_y = (video_output.shape[0] - crop_height) // 2 - height_adjust
         # cropped_img = video_output[start_y:start_y + crop_height, start_x:start_x + crop_width]
-
+        global input_image
+        with input_lock:
+            input_image = image
         # process the image in a separate thread
-        with ThreadPoolExecutor() as executor:
-            executor.submit(lambda: process_image(video_output, processed_output))
+        # with ThreadPoolExecutor() as executor:
+        #     executor.submit(lambda: process_image(video_output, processed_output))
 
     except Exception as e:
         print(e.with_traceback())
 
 # attach the callback to the camera
-front_camera.listen(lambda image: camera_callback(image))
+rgb_camera.listen(lambda image: camera_callback(image))
 
 def cleanup():
     remove_all(world)
 
 # start the game loop
 try:
-    game_loop.start(processed_output, autopilot=False, detection_center=100, threshold=7)
+    game_loop.start(autopilot=False, detection_center=100, threshold=7)
 except KeyboardInterrupt:
     cleanup()
 finally:

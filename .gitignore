@@ -1,6 +1,8 @@
 # Created by https://www.toptal.com/developers/gitignore/api/react,node,nextjs
 # Edit at https://www.toptal.com/developers/gitignore?templates=react,node,nextjs
 
+__pycache__
+
 ### NextJS ###
 # dependencies
 /node_modules
