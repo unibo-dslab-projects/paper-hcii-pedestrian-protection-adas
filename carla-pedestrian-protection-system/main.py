@@ -35,7 +35,7 @@ NUM_WALKERS = 50
 
 BROKER = "localhost"
 PORT = 1883
-TOPIC = "pedestrian_monitoring/"
+TOPIC = "pedestrian_monitoring"
 
 CAMERA_WIDTH = 1920
 CAMERA_HEIGHT = 1080
