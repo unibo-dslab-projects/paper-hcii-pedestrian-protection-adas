@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "react";
 import mqtt from "mqtt";
-import WarningMessage from "./WarningMessage";
-import NeutralMessage from "./NeutralMessage";
+import { useEffect, useRef, useState } from "react";
 import DangerMessage from "./DangerMessage";
-import Navbar from "./Navbar";
 import DisplaySettings, { AlertSettings } from "./DisplaySettings";
+import Navbar from "./Navbar";
+import NeutralMessage from "./NeutralMessage";
+import WarningMessage from "./WarningMessage";
 
 type Pedestrian = {
   x: number;
@@ -62,7 +62,7 @@ function Dashboard() {
     const pedestrianImage = new Image();
     pedestrianImage.src = "/pedestrian.png";
     const pedestrianAtX = canvasSettings.width * (pedestrian.x / pedestrian.camera_width);
-    const pedestrianAtY = canvasSettings.height * (pedestrian.distance / 30);
+    const pedestrianAtY = canvasSettings.height * (1 - pedestrian.distance / 30);
     pedestrianImage.onload = () => {
       ctx.beginPath();
       ctx.fillStyle = "rgba(150, 255, 0, 0.9)";
@@ -90,7 +90,7 @@ function Dashboard() {
     /* Draw the lane lines */
     ctx.strokeStyle = "white";
     ctx.lineWidth = 10;
-    
+
     // Draw left curb line
     const curbOffset = 30;
     ctx.beginPath();
@@ -123,7 +123,7 @@ function Dashboard() {
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
-    client.current.subscribe("hello");
+    client.current.subscribe("pedestrian_monitoring");
     client.current.on("message", (topic, message) => {
       setPedestrians(() => {
         const newPedestrians = JSON.parse(message.toString()) as Pedestrian[];
@@ -159,28 +159,28 @@ function Dashboard() {
     <>
       <Navbar>
         <ul className="font-medium flex flex-col p-4 md:p-0 mt-4 border border-gray-100 rounded-lg bg-gray-50 md:flex-row md:space-x-8 rtl:space-x-reverse md:mt-0 md:border-0 md:bg-white dark:bg-gray-800 md:dark:bg-gray-900 dark:border-gray-700">
-            <li>
-                <DisplaySettings settings={alarmSettings} setSettings={setAlarmSettings} />
-            </li>
+          <li>
+            <DisplaySettings settings={alarmSettings} setSettings={setAlarmSettings} />
+          </li>
         </ul>
       </Navbar>
       <div className="p-4 flex justify-center">
-          <div className="relative">
-            <audio ref={audioRef} id="audio" loop>
-              <source src="/MobitasAlertSound.m4a" type="audio/mp4"/>
-            </audio>
-            <canvas ref={canvasRef} id="canvas" width={canvasSettings.width} height={canvasSettings.height} className="border mb-6 rounded-lg"></canvas>
-            {showWarning && <WarningMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.distance / 2} />}
-            {!showWarning && <NeutralMessage />}
-            {false && <DangerMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.time_to_collision / 2} />}
-          </div>
-          {
-            showWarning && alarmSettings.flashing &&
-            <>
-              <div className="absolute top-0 left-0 h-full shadow-2xl bg-red-400 shadow-red-500 w-30 animate-ping z-0"></div>
-              <div className="absolute top-0 right-0 h-full shadow-2xl bg-red-400 shadow-red-500 w-30 animate-ping z-0"></div>
-            </>
-          }
+        <div className="relative">
+          <audio ref={audioRef} id="audio" loop>
+            <source src="/MobitasAlertSound.m4a" type="audio/mp4" />
+          </audio>
+          <canvas ref={canvasRef} id="canvas" width={canvasSettings.width} height={canvasSettings.height} className="border mb-6 rounded-lg"></canvas>
+          {showWarning && <WarningMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.time_to_collision} />}
+          {!showWarning && <NeutralMessage />}
+          {false && <DangerMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.time_to_collision} />}
+        </div>
+        {
+          showWarning && alarmSettings.flashing &&
+          <>
+            <div className="absolute top-0 left-0 h-full shadow-2xl bg-red-400 shadow-red-500 w-30 animate-ping z-0"></div>
+            <div className="absolute top-0 right-0 h-full shadow-2xl bg-red-400 shadow-red-500 w-30 animate-ping z-0"></div>
+          </>
+        }
       </div>
     </>
   );
