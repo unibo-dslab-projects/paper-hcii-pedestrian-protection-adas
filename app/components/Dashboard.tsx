@@ -61,7 +61,7 @@ function Dashboard() {
   function drawPedestrian(ctx: CanvasRenderingContext2D, pedestrian: Pedestrian) {
     const pedestrianImage = new Image();
     pedestrianImage.src = "/pedestrian.png";
-    const pedestrianAtX = canvasSettings.width * (pedestrian.x / pedestrian.width);
+    const pedestrianAtX = canvasSettings.width * (pedestrian.x / pedestrian.camera_width);
     const pedestrianAtY = canvasSettings.height * (pedestrian.distance / 30);
     pedestrianImage.onload = () => {
       ctx.beginPath();
