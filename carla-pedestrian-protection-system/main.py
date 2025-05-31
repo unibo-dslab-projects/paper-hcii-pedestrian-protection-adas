@@ -10,6 +10,7 @@ from typing import List
 import random
 import time
 import threading
+import json
 
 #########################################
 ################ Classes ################
@@ -20,6 +21,7 @@ class Pedestrian:
     x: int
     y: int
     distance: float # maybe int with fixed precision is enough
+    time_to_collision: float
 
 class Mode(Enum):
     KEYBOARD = 1
@@ -43,8 +45,9 @@ VIEW_FOV = 120
 
 model = YOLO("yolov8n.pt")
 
-cv2.namedWindow('RGB image', cv2.WINDOW_NORMAL)
-cv2.namedWindow('Depth image', cv2.WINDOW_NORMAL)
+if CAMERA_DEBUG:
+    cv2.namedWindow('RGB image', cv2.WINDOW_NORMAL)
+    cv2.namedWindow('Depth image', cv2.WINDOW_NORMAL)
 
 client = carla.Client('localhost', 2000)
 client.set_timeout(10.0)
@@ -108,7 +111,8 @@ def setup_camera(car: carla.Vehicle):
     Returns:
         tuple: A tuple containing the RGB camera and the Depth camera actors.
     """
-    camera_transform = carla.Transform(carla.Location(x=1, y=-0.4, z=1.2), carla.Rotation())
+    # camera_transform = carla.Transform(carla.Location(x=1, y=-0.4, z=1.2), carla.Rotation())
+    camera_transform = carla.Transform(carla.Location(x=1, y=0, z=1.2), carla.Rotation())
 
     blueprint_library = world.get_blueprint_library()
 
@@ -196,17 +200,18 @@ def send_pedestrian_data(pedestrians: List[Pedestrian]):
     Args:
         pedestrians (list): A list of Pedestrian objects containing their positions and distances.
     """
-    if not pedestrians:
-        return
 
-    payload = {
-        "pedestrians": [
-            {"x": ped.x, "y": ped.y, "distance": ped.distance} for ped in pedestrians
-        ]
-    }
-    
+    payload = [
+        {
+            "x": ped.x,
+            "distance": f"{ped.distance:.2f}",
+            "camera_width": CAMERA_WIDTH,
+            "time_to_collision": f"{ped.time_to_collision:.2f}",
+        } for ped in pedestrians
+    ]
+
     try:
-        mqtt_client.publish(TOPIC, str(payload))
+        mqtt_client.publish(TOPIC, json.dumps(payload))
     except Exception as e:
         print(f"Failed to publish data: {e}")
 
@@ -266,11 +271,17 @@ def process_image():
         rgb_image = rgb_image[:, :, :3]
         depth_image = np.reshape(np.copy(depth_image.raw_data), (depth_image.height, depth_image.width, 4))
 
+        vehicle_speed = vehicle.get_velocity()
+        vehicle_speed_mps = np.sqrt(vehicle_speed.x**2 + vehicle_speed.y**2 + vehicle_speed.z**2)
+
+        print(f"Vehicle speed: {vehicle_speed_mps:.2f} m/s")
+
         detections = detect_pedestrians(rgb_image)
         detected_pedestrians: list[Pedestrian] = []
         for _, _, centroid in detections:
             distance = get_distance_to_pedestrian_centroid(centroid, depth_image)
-            detected_pedestrians.append(Pedestrian(x=centroid[0], y=centroid[1], distance=distance))
+            time_to_collision = distance / vehicle_speed_mps if vehicle_speed_mps > 0 else float('inf')
+            detected_pedestrians.append(Pedestrian(x=centroid[0], y=centroid[1], distance=distance, time_to_collision=time_to_collision))
         
         # for pedestrian in detected_pedestrians:
         #     print(f"Pedestrian detected at ({pedestrian.x}, {pedestrian.y}) with distance {pedestrian.distance} meters")
@@ -468,7 +479,7 @@ for _ in range(NUM_WALKERS):
 game_loop = setup()
 
 # get the vehicle and attach the camera
-vehicle = world.get_actors().filter('vehicle.*')[0]
+vehicle: carla.Vehicle = world.get_actors().filter('vehicle.*')[0]
 rgb_camera, depth_camera = setup_camera(vehicle)
 
 threading.Thread(target=process_image, daemon=True).start()
