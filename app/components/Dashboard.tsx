@@ -8,8 +8,9 @@ import DisplaySettings, { AlertSettings } from "./DisplaySettings";
 
 type Pedestrian = {
   x: number;
-  y: number;
   distance: number;
+  timeToCollision: number;
+  width: number;
 }
 
 type CanvasSettings = {
@@ -60,15 +61,17 @@ function Dashboard() {
   function drawPedestrian(ctx: CanvasRenderingContext2D, pedestrian: Pedestrian) {
     const pedestrianImage = new Image();
     pedestrianImage.src = "/pedestrian.png";
+    const pedestrianAtX = canvasSettings.width * (pedestrian.x / pedestrian.width);
+    const pedestrianAtY = canvasSettings.height * (pedestrian.distance / 30);
     pedestrianImage.onload = () => {
       ctx.beginPath();
       ctx.fillStyle = "rgba(150, 255, 0, 0.9)";
-      ctx.arc(pedestrian.x + 25, pedestrian.y + 40, 50, 0, Math.PI * 2);
+      ctx.arc(pedestrianAtX + 25, pedestrianAtY + 40, 50, 0, Math.PI * 2);
       ctx.fill();
-      ctx.drawImage(pedestrianImage, pedestrian.x, pedestrian.y, 50, 50);
+      ctx.drawImage(pedestrianImage, pedestrianAtX, pedestrianAtY, 50, 50);
       ctx.font = "20px Arial";
       ctx.fillStyle = "black";
-      ctx.fillText(`${pedestrian.distance} m`, pedestrian.x-10, pedestrian.y + 70);
+      ctx.fillText(`${pedestrian.distance} m`, pedestrianAtX - 10, pedestrianAtY + 70);
     };
   }
 
