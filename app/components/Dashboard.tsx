@@ -9,8 +9,8 @@ import DisplaySettings, { AlertSettings } from "./DisplaySettings";
 type Pedestrian = {
   x: number;
   distance: number;
-  timeToCollision: number;
-  width: number;
+  time_to_collision: number;
+  camera_width: number;
 }
 
 type CanvasSettings = {
@@ -172,7 +172,7 @@ function Dashboard() {
             <canvas ref={canvasRef} id="canvas" width={canvasSettings.width} height={canvasSettings.height} className="border mb-6 rounded-lg"></canvas>
             {showWarning && <WarningMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.distance / 2} />}
             {!showWarning && <NeutralMessage />}
-            {false && <DangerMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.timeToCollision / 2} />}
+            {false && <DangerMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.time_to_collision / 2} />}
           </div>
           {
             showWarning && alarmSettings.flashing &&
