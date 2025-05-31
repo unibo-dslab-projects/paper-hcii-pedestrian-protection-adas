@@ -30,10 +30,10 @@ function Dashboard() {
   const canvasSettings: CanvasSettings = {
     width: 1200,
     height: 600,
-    carWidth: 200,
+    carWidth: 400,
     carHeight: 200,
-    baseLaneWidth: 800,
-    farLaneWidth: 400,
+    baseLaneWidth: 1200,
+    farLaneWidth: 950,
   }
   const [alarmSettings, setAlarmSettings] = useState<AlertSettings>({
     soundOnWarning: true,
@@ -54,7 +54,7 @@ function Dashboard() {
     const carImage = new Image();
     carImage.src = "/car.png";
     carImage.onload = () => {
-      ctx.drawImage(carImage, (canvasSettings.width - canvasSettings.carWidth) / 2 + canvasSettings.baseLaneWidth * 0.25, canvasSettings.height - canvasSettings.carHeight, canvasSettings.carWidth, canvasSettings.carHeight);
+      ctx.drawImage(carImage, (canvasSettings.width - canvasSettings.carWidth) / 2, canvasSettings.height - canvasSettings.carHeight, canvasSettings.carWidth, canvasSettings.carHeight);
     };
   }
 
@@ -111,13 +111,13 @@ function Dashboard() {
     ctx.stroke();
 
     // Draw dashed center line
-    ctx.beginPath();
+    /*ctx.beginPath();
     ctx.lineWidth = 5;
     ctx.setLineDash([20, 40]);
     ctx.moveTo(canvasSettings.width / 2, canvasSettings.height);
     ctx.lineTo(canvasSettings.width / 2, 0);
     ctx.stroke();
-    ctx.setLineDash([]); // Reset dash
+    ctx.setLineDash([]); // Reset dash */
   }
 
   useEffect(() => {
