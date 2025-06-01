@@ -59,22 +59,24 @@ function Dashboard() {
   }
 
   function drawPedestrian(ctx: CanvasRenderingContext2D, pedestrian: Pedestrian) {
-    const safetyBands = [
-      { level: 1, color: "white" },
-      { level: 2, color: "yellow" },
-      { level: 3, color: "red" }
+    const bands = [
+      { maxTTC: 12, color: "white" },
+      { maxTTC: 10, color: "yellow" },
+      { maxTTC: 5, color: "red" },
     ];
-    const pedestrianImage = new Image();
-    const pedestrianAtX = canvasSettings.width * (pedestrian.x / pedestrian.camera_width);
-    const pedestrianAtY = canvasSettings.height * (1 - pedestrian.distance / 30);
-    const safetyBand = safetyBands.find(band => {
-      const bandwidth = (canvasSettings.width * 0.165) * band.level;
-      return pedestrianAtX < bandwidth || pedestrianAtX > canvasSettings.width - bandwidth;
-    });
-    pedestrianImage.src = safetyBand ? `/pedestrian-${safetyBand.color}.png` : "/pedestrian-blue.png";
-    pedestrianImage.onload = () => {
-      ctx.drawImage(pedestrianImage, pedestrianAtX, pedestrianAtY, 150, 150);
-    };
+    const x = canvasSettings.width * (pedestrian.x / pedestrian.camera_width);
+    const y = canvasSettings.height * (1 - pedestrian.distance / 30);
+    let color = "blue";
+    for (const band of bands) {
+      const bandwidth = (canvasSettings.width * 0.165) * (bands.indexOf(band) + 1);
+      if ((x < bandwidth || x > canvasSettings.width - bandwidth) && pedestrian.time_to_collision < band.maxTTC) {
+        color = band.color;
+        break;
+      }
+    }
+    const img = new Image();
+    img.src = `/pedestrian-${color}.png`;
+    img.onload = () => ctx.drawImage(img, x, y, 150, 150);
   }
 
   function drawLane(ctx: CanvasRenderingContext2D) {
