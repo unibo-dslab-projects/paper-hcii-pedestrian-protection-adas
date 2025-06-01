@@ -59,10 +59,19 @@ function Dashboard() {
   }
 
   function drawPedestrian(ctx: CanvasRenderingContext2D, pedestrian: Pedestrian) {
+    const safetyBands = [
+      { level: 1, color: "white" },
+      { level: 2, color: "yellow" },
+      { level: 3, color: "red" }
+    ];
     const pedestrianImage = new Image();
-    pedestrianImage.src = "/pedestrian.png";
     const pedestrianAtX = canvasSettings.width * (pedestrian.x / pedestrian.camera_width);
     const pedestrianAtY = canvasSettings.height * (1 - pedestrian.distance / 30);
+    const safetyBand = safetyBands.find(band => {
+      const bandwidth = (canvasSettings.width * 0.165) * band.level;
+      return pedestrianAtX < bandwidth || pedestrianAtX > canvasSettings.width - bandwidth;
+    });
+    pedestrianImage.src = safetyBand ? `/pedestrian-${safetyBand.color}.png` : "/pedestrian-blue.png";
     pedestrianImage.onload = () => {
       ctx.drawImage(pedestrianImage, pedestrianAtX, pedestrianAtY, 150, 150);
     };
@@ -102,15 +111,6 @@ function Dashboard() {
     ctx.moveTo((canvasSettings.width - canvasSettings.farLaneWidth) / 2 + canvasSettings.farLaneWidth - curbOffset, 0);
     ctx.lineTo((canvasSettings.width - canvasSettings.baseLaneWidth) / 2 + canvasSettings.baseLaneWidth - curbOffset, canvasSettings.height);
     ctx.stroke();
-
-    // Draw dashed center line
-    /*ctx.beginPath();
-    ctx.lineWidth = 5;
-    ctx.setLineDash([20, 40]);
-    ctx.moveTo(canvasSettings.width / 2, canvasSettings.height);
-    ctx.lineTo(canvasSettings.width / 2, 0);
-    ctx.stroke();
-    ctx.setLineDash([]); // Reset dash */
   }
 
   useEffect(() => {
