@@ -64,14 +64,7 @@ function Dashboard() {
     const pedestrianAtX = canvasSettings.width * (pedestrian.x / pedestrian.camera_width);
     const pedestrianAtY = canvasSettings.height * (1 - pedestrian.distance / 30);
     pedestrianImage.onload = () => {
-      ctx.beginPath();
-      ctx.fillStyle = "rgba(150, 255, 0, 0.9)";
-      ctx.arc(pedestrianAtX + 25, pedestrianAtY + 40, 50, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.drawImage(pedestrianImage, pedestrianAtX, pedestrianAtY, 50, 50);
-      ctx.font = "20px Arial";
-      ctx.fillStyle = "black";
-      ctx.fillText(`${pedestrian.distance} m`, pedestrianAtX - 10, pedestrianAtY + 70);
+      ctx.drawImage(pedestrianImage, pedestrianAtX, pedestrianAtY, 150, 150);
     };
   }
 
