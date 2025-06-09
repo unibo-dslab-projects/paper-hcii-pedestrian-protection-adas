@@ -32,15 +32,15 @@ class Mode(Enum):
 ##########################################
 
 MODE = Mode.KEYBOARD
-CAMERA_DEBUG = True
+CAMERA_DEBUG = False
 NUM_WALKERS = 50
 
 BROKER = "localhost"
 PORT = 1883
 TOPIC = "pedestrian_monitoring"
 
-CAMERA_WIDTH = 1920
-CAMERA_HEIGHT = 1080
+CAMERA_WIDTH = 2560
+CAMERA_HEIGHT = 720
 VIEW_FOV = 120
 
 model = YOLO("yolov8n.pt")
@@ -274,7 +274,7 @@ def process_image():
         vehicle_speed = vehicle.get_velocity()
         vehicle_speed_mps = np.sqrt(vehicle_speed.x**2 + vehicle_speed.y**2 + vehicle_speed.z**2)
 
-        print(f"Vehicle speed: {vehicle_speed_mps:.2f} m/s")
+        # print(f"Vehicle speed: {vehicle_speed_mps:.2f} m/s")
 
         detections = detect_pedestrians(rgb_image)
         detected_pedestrians: list[Pedestrian] = []
@@ -283,8 +283,8 @@ def process_image():
             time_to_collision = distance / vehicle_speed_mps if vehicle_speed_mps > 0 else float('inf')
             detected_pedestrians.append(Pedestrian(x=centroid[0], y=centroid[1], distance=distance, time_to_collision=time_to_collision))
         
-        # for pedestrian in detected_pedestrians:
-        #     print(f"Pedestrian detected at ({pedestrian.x}, {pedestrian.y}) with distance {pedestrian.distance} meters")
+        for pedestrian in detected_pedestrians:
+            print(f"Pedestrian detected at ({pedestrian.x}, {pedestrian.y}) with distance {pedestrian.distance} meters")
         
         send_pedestrian_data(detected_pedestrians)
 
@@ -364,6 +364,7 @@ class GameLoop(object):
                     return
 
                 try:
+
                     with processed_output_lock:
                         output_rgb_image = processed_output["rgb_image"]
                         output_depth_image = processed_output["depth_image"]
@@ -452,7 +453,7 @@ def setup():
 
     # Set window resolution
     args.res = '1280x720'
-    args.width, args.height = [int(x) for x in args.res.split('x')]
+    args.width, args.height = CAMERA_WIDTH, CAMERA_HEIGHT #[int(x) for x in args.res.split('x')]
 
     # Set vehicle filter
     args.filter = 'vehicle.mercedes.coupe_2020'

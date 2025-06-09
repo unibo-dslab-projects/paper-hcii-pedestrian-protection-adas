@@ -13,6 +13,12 @@ type Pedestrian = {
   camera_width: number;
 }
 
+enum PedestrianState {
+  SAFE = "SAFE",
+  WARNING = "WARNING",
+  DANGER = "DANGER",
+}
+
 type CanvasSettings = {
   width: number;
   height: number;
@@ -25,8 +31,13 @@ type CanvasSettings = {
 function Dashboard() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  const client = useRef(mqtt.connect("ws://localhost:8080"));
+  const client = useRef<mqtt.MqttClient | null>(null);
   const [pedestrians, setPedestrians] = useState<Pedestrian[]>([]);
+
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const audioSourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
+  const audioBufferRef = useRef<AudioBuffer | null>(null);
+
   const canvasSettings: CanvasSettings = {
     width: 1200,
     height: 600,
@@ -40,7 +51,7 @@ function Dashboard() {
     soundOnDanger: true,
     flashing: true,
   });
-  const showWarning: boolean = pedestrians.length > 0
+  const [showWarning, setShowWarning] = useState<boolean>(false);
 
   function clearCanvas(ctx: CanvasRenderingContext2D) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -59,24 +70,27 @@ function Dashboard() {
   }
 
   function drawPedestrian(ctx: CanvasRenderingContext2D, pedestrian: Pedestrian) {
-    const bands = [
-      { maxTTC: 12, color: "white" },
-      { maxTTC: 10, color: "yellow" },
-      { maxTTC: 5, color: "red" },
-    ];
     const x = canvasSettings.width * (pedestrian.x / pedestrian.camera_width);
     const y = canvasSettings.height * (1 - pedestrian.distance / 30);
-    let color = "blue";
-    for (const band of bands) {
-      const bandwidth = (canvasSettings.width * 0.165) * (bands.indexOf(band) + 1);
-      if ((x < bandwidth || x > canvasSettings.width - bandwidth) && pedestrian.time_to_collision < band.maxTTC) {
-        color = band.color;
-        break;
-      }
+
+    let color = "white";
+    const pedestrianState = calculatePedestrianState(pedestrian);
+    if (pedestrianState === PedestrianState.DANGER) {
+      color = "red";
+    } else if (pedestrianState === PedestrianState.WARNING) {
+      color = "yellow";
     }
+
     const img = new Image();
     img.src = `/pedestrian-${color}.png`;
-    img.onload = () => ctx.drawImage(img, x, y, 150, 150);
+
+    // TODO: improve pedestrian car overlapping
+    img.onload = () => {
+      const imgHeight = 150;
+      const carBottom = canvasSettings.height - canvasSettings.carHeight;
+      const adjustedY = Math.max(0, Math.min(y, carBottom - 120));
+      ctx.drawImage(img, x, adjustedY, imgHeight, imgHeight);
+    };
   }
 
   function drawLane(ctx: CanvasRenderingContext2D) {
@@ -115,9 +129,22 @@ function Dashboard() {
     ctx.stroke();
   }
 
+  function calculatePedestrianState(pedestrian: Pedestrian): PedestrianState {
+    const x = canvasSettings.width * (pedestrian.x / pedestrian.camera_width);
+    const sectionWidth = canvasSettings.width / 6;
+
+    if (x >= 2 * sectionWidth && x < 4 * sectionWidth && pedestrian.time_to_collision < 5) {
+      return PedestrianState.DANGER;
+    } else if ((x >= sectionWidth && x < 2 * sectionWidth) || (x >= 4 * sectionWidth && x < 5 * sectionWidth)) {
+      return PedestrianState.WARNING;
+    }
+    return PedestrianState.SAFE;
+  }
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
+    client.current = mqtt.connect("ws://isi-simcar.campusfc.dir.unibo.it:8080");
     client.current.subscribe("pedestrian_monitoring");
     client.current.on("message", (topic, message) => {
       setPedestrians(() => {
@@ -129,23 +156,47 @@ function Dashboard() {
     if (ctx) {
       clearCanvas(ctx);
     }
+
+    // Initialize the AudioContext
+    audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+
+    // Load the audio file into the AudioContext
+    const loadAudio = async () => {
+      const response = await fetch('/MobitasAlertSound.m4a');
+      const audioData = await response.arrayBuffer();
+      const audioBuffer = await audioContextRef.current.decodeAudioData(audioData);
+      audioBufferRef.current = audioBuffer;
+    };
+
+    loadAudio();
   }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
+    const warning = pedestrians.some((pedestrian) => {
+      const pedestrianState = calculatePedestrianState(pedestrian);
+      return pedestrianState === PedestrianState.DANGER;
+    });
+    setShowWarning(warning);
     if (ctx) {
       clearCanvas(ctx);
       pedestrians.forEach((pedestrian) => {
         drawPedestrian(ctx, pedestrian);
       });
-      if (pedestrians.length > 0 && alarmSettings.soundOnWarning) {
-        if (audioRef.current.paused) {
-          audioRef.current.currentTime = 0;
+      if (warning && alarmSettings.soundOnWarning) {
+        if (audioContextRef.current && audioBufferRef.current && !audioSourceNodeRef.current) {
+          const source = audioContextRef.current.createBufferSource();
+          source.buffer = audioBufferRef.current;
+          source.connect(audioContextRef.current.destination);
+          source.start(); // Play the sound
+          audioSourceNodeRef.current = source;
         }
-        audioRef.current.play();
       } else {
-        audioRef.current.pause();
+        if (audioSourceNodeRef.current) {
+          audioSourceNodeRef.current.stop();
+          audioSourceNodeRef.current = null; // Reset the source node
+        }
       }
     }
   }, [pedestrians]);
@@ -161,9 +212,6 @@ function Dashboard() {
       </Navbar>
       <div className="p-4 flex justify-center">
         <div className="relative">
-          <audio ref={audioRef} id="audio" loop>
-            <source src="/MobitasAlertSound.m4a" type="audio/mp4" />
-          </audio>
           <canvas ref={canvasRef} id="canvas" width={canvasSettings.width} height={canvasSettings.height} className="border mb-6 rounded-lg"></canvas>
           {showWarning && <WarningMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.time_to_collision} />}
           {!showWarning && <NeutralMessage />}
