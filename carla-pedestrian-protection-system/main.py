@@ -31,7 +31,7 @@ class Mode(Enum):
 ################# Config #################
 ##########################################
 
-MODE = Mode.KEYBOARD
+MODE = Mode.STEERING_WHEEL
 CAMERA_DEBUG = False
 NUM_WALKERS = 50
 

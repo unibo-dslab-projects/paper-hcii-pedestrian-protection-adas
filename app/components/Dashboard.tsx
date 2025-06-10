@@ -30,9 +30,10 @@ type CanvasSettings = {
 
 function Dashboard() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const client = useRef<mqtt.MqttClient | null>(null);
   const [pedestrians, setPedestrians] = useState<Pedestrian[]>([]);
+
+  const pedestrianImages = useRef<{ [color: string]: HTMLImageElement }>({});
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioSourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
@@ -57,16 +58,7 @@ function Dashboard() {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.fillStyle = "rgb(240, 240, 240)";
     ctx.fillRect(0, 0, canvasSettings.width, canvasSettings.height);
-    drawCar(ctx);
     drawLane(ctx);
-  }
-
-  function drawCar(ctx: CanvasRenderingContext2D) {
-    const carImage = new Image();
-    carImage.src = "/car.png";
-    carImage.onload = () => {
-      ctx.drawImage(carImage, (canvasSettings.width - canvasSettings.carWidth) / 2, canvasSettings.height - canvasSettings.carHeight, canvasSettings.carWidth, canvasSettings.carHeight);
-    };
   }
 
   function drawPedestrian(ctx: CanvasRenderingContext2D, pedestrian: Pedestrian) {
@@ -81,16 +73,21 @@ function Dashboard() {
       color = "yellow";
     }
 
-    const img = new Image();
-    img.src = `/pedestrian-${color}.png`;
+    const img = pedestrianImages.current[color];
 
-    // TODO: improve pedestrian car overlapping
-    img.onload = () => {
-      const imgHeight = 150;
-      const carBottom = canvasSettings.height - canvasSettings.carHeight;
-      const adjustedY = Math.max(0, Math.min(y, carBottom - 120));
+    const imgHeight = 150;
+    const carBottom = canvasSettings.height - canvasSettings.carHeight;
+    const adjustedY = x >= (canvasSettings.width - canvasSettings.carWidth - 40) / 2 && x <= (canvasSettings.width + canvasSettings.carWidth + 40) / 2
+      ? Math.max(0, Math.min(y, carBottom - 120))
+      : y;
+
+    if (img.complete) {
       ctx.drawImage(img, x, adjustedY, imgHeight, imgHeight);
-    };
+    } else {
+      img.onload = () => {
+        ctx.drawImage(img, x, adjustedY, imgHeight, imgHeight);
+      };
+    }
   }
 
   function drawLane(ctx: CanvasRenderingContext2D) {
@@ -135,7 +132,7 @@ function Dashboard() {
 
     if (x >= 2 * sectionWidth && x < 4 * sectionWidth && pedestrian.time_to_collision < 5) {
       return PedestrianState.DANGER;
-    } else if ((x >= sectionWidth && x < 2 * sectionWidth) || (x >= 4 * sectionWidth && x < 5 * sectionWidth)) {
+    } else if (((x >= sectionWidth && x < 2 * sectionWidth) || (x >= 4 * sectionWidth && x < 5 * sectionWidth)) && pedestrian.time_to_collision < 10) {
       return PedestrianState.WARNING;
     }
     return PedestrianState.SAFE;
@@ -157,8 +154,15 @@ function Dashboard() {
       clearCanvas(ctx);
     }
 
+    const colors = ["white", "yellow", "red"];
+    colors.forEach((color) => {
+      const img = new Image();
+      img.src = `/pedestrian-${color}.png`;
+      pedestrianImages.current[color] = img;
+    });
+
     // Initialize the AudioContext
-    audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    audioContextRef.current = new window.AudioContext();
 
     // Load the audio file into the AudioContext
     const loadAudio = async () => {
@@ -213,6 +217,17 @@ function Dashboard() {
       <div className="p-4 flex justify-center">
         <div className="relative">
           <canvas ref={canvasRef} id="canvas" width={canvasSettings.width} height={canvasSettings.height} className="border mb-6 rounded-lg"></canvas>
+          <img
+            src="/car.png"
+            alt="Car"
+            className="absolute z-10"
+            style={{
+              width: `${canvasSettings.carWidth}px`,
+              height: `${canvasSettings.carHeight}px`,
+              left: `${(canvasSettings.width - canvasSettings.carWidth) / 2}px`,
+              top: `${canvasSettings.height - canvasSettings.carHeight}px`,
+            }}
+          />
           {showWarning && <WarningMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.time_to_collision} />}
           {!showWarning && <NeutralMessage />}
           {false && <DangerMessage distance={pedestrians[0]?.distance} timeToCollision={pedestrians[0]?.time_to_collision} />}

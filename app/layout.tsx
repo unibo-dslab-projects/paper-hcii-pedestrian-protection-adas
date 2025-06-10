@@ -14,6 +14,7 @@ export default function RootLayout({
                 <title>Smart Car</title>
                 <meta name="viewport" content="width=device-width, initial-scale=1" />
                 <link href="https://cdn.jsdelivr.net/npm/flowbite@3.1.2/dist/flowbite.min.css" rel="stylesheet" />
+                <meta name="theme-color" content="#111827"></meta>
             </head>
             <body>
                 {children}
