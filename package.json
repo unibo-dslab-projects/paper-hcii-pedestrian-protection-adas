@@ -1,7 +1,6 @@
 {
   "dependencies": {
     "@tailwindcss/postcss": "^4.1.7",
-    "@types/tailwindcss": "^3.0.11",
     "mqtt": "^5.13.0",
     "next": "^15.3.0",
     "postcss": "^8.5.3",
